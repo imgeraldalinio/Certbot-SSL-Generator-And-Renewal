@@ -15,7 +15,7 @@ do
 done
 
 # filter domain name
-domain_name=$(printf "$DOMAINS" | grep -oE '[a-z0-9][a-z0-9-]{0,61}[a-z0-9](\w{2,}\.\w{2,3}\.\w{2,3}|\w{2,}\.\w{2,24})$')
+domain_name=$(printf "$DOMAINS" | grep -oE '[a-z0-9][a-z0-9-]{0,61}[a-z0-9](\w{2,}\.\w{2,3}\.\w{2,3}|\w{1,}\.\w{2,24})$')
 
 # dns challenge
 # certbot certonly --config /etc/letsencrypt/cli.ini  --manual --preferred-challenges dns $DOMAINS --cert-name $domain_name
