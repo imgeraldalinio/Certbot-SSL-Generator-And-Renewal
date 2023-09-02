@@ -1,78 +1,84 @@
 #!/bin/bash
 
 echo "########START########"
-if [ "$EUID" -ne 0 ]
-  then echo "Please run as root"
-  exit
+
+# Check for root privileges
+if [ "$EUID" -ne 0 ]; then
+  echo "Please run as root"
+  exit 1
 fi
 
-if [ -f /etc/letsencrypt/live/README ]
-then
-        rm /etc/letsencrypt/live/README
+# Remove the README file if it exists
+if [ -f /etc/letsencrypt/live/README ]; then
+  rm /etc/letsencrypt/live/README
 fi
 
-for i in $( ls /etc/letsencrypt/live ); do
-
+# Define common configuration variables
 web_service='haproxy'
 config_file='/etc/letsencrypt/cli.ini'
-domain=$i
-combined_file="/etc/haproxy/certs/${domain}.pem"
-
 le_path='/usr/bin/'
-exp_limit=30;
+exp_limit=30
 
-if [ ! -f $config_file ]; then
-        echo "[ERROR] config file does not exist: $config_file"
-        exit 1;
-fi
+# Function to renew a domain certificate
+renew_certificate() {
+  local domain="$1"
+  local cert_file="/etc/letsencrypt/live/$domain/fullchain.pem"
+  local key_file="/etc/letsencrypt/live/$domain/privkey.pem"
+  local combined_file="/etc/haproxy/certs/${domain}.pem"
 
-cert_file="/etc/letsencrypt/live/$domain/fullchain.pem"
-key_file="/etc/letsencrypt/live/$domain/privkey.pem"
+  # Check if the configuration file exists
+  if [ ! -f "$config_file" ]; then
+    echo "[ERROR] Config file does not exist: $config_file"
+    exit 1
+  fi
 
-if [ ! -f $cert_file ]; then
-        echo "[ERROR] certificate file not found for domain $domain."
-fi
+  # Check if the certificate file exists
+  if [ ! -f "$cert_file" ]; then
+    echo "[ERROR] Certificate file not found for domain $domain."
+    return
+  fi
 
-exp=$(date -d "`openssl x509 -in $cert_file -text -noout|grep "Not After"|cut -c 25-`" +%s)
-datenow=$(date -d "now" +%s)
-days_exp=$(echo \( $exp - $datenow \) / 86400 |bc)
+  # Calculate the expiration date in days
+  local exp=$(date -d "$(openssl x509 -in "$cert_file" -text -noout | grep 'Not After' | cut -c 25-)" +%s)
+  local datenow=$(date -d "now" +%s)
+  local days_exp=$(( (exp - datenow) / 86400 ))
 
-echo "Checking expiration date for $domain..."
+  echo "Checking expiration date for $domain..."
 
-if [ "$days_exp" -gt "$exp_limit" ] ; then
-        echo "The certificate is up to date, no need for renewal ($days_exp days left)."
-else
-        echo "The certificate for $domain is about to expire soon. Starting Let's Encrypt (HAProxy:$http_01_port) renewal script..."
+  if [ "$days_exp" -gt "$exp_limit" ]; then
+    echo "The certificate is up to date, no need for renewal ($days_exp days left)."
+  else
+    echo "The certificate for $domain is about to expire soon. Starting Let's Encrypt renewal script..."
 
-        logdate="certbot-`date +\%Y\%m\%d\%H\%M\%S`.log"
-        file_output=/tmp/$logdate
-        $le_path/certbot certonly --renew-by-default --config $config_file --cert-name $domain -d $domain >> $file_output
-        watch_error=`cat $file_output | grep "Congratulations!" | wc -l`;
+    local logdate="certbot-$(date +%Y%m%d%H%M%S).log"
+    local file_output="/tmp/$logdate"
+    
+    # Renew the certificate
+    $le_path/certbot certonly --renew-by-default --config "$config_file" --cert-name "$domain" -d "$domain" >> "$file_output"
+    local watch_error=$(cat "$file_output" | grep "Congratulations!" | wc -l)
 
-        if [ $watch_error -eq 1 ]
-        then
-                echo "Creating $combined_file with latest certs..."
-                cat /etc/letsencrypt/live/$domain/fullchain.pem /etc/letsencrypt/live/$domain/privkey.pem > $combined_file
-                echo "Reloading $web_service"
-                /usr/sbin/service $web_service reload
-                echo "Renewal process finished for domain $domain"
-        else
-                echo "Failed to generate ssl certificate"
-        fi
+    if [ $watch_error -eq 1 ]; then
+      echo "Creating $combined_file with latest certs..."
+      cat "$cert_file" "$key_file" > "$combined_file"
+      echo "Reloading $web_service"
+      /usr/sbin/service "$web_service" reload
+      echo "Renewal process finished for domain $domain"
+    else
+      echo "Failed to generate SSL certificate"
+    fi
 
-        if [ -f $file_output ]
-        then
-                rm $file_output
-        fi
+    # Remove the temporary log file
+    if [ -f "$file_output" ]; then
+      rm "$file_output"
+    fi
+  fi
+}
 
-        if [ -f /etc/haproxy/certs/README.pem ]
-        then
-                rm /etc/haproxy/certs/README.pem
-        fi
-
-        echo "###########################################"
-fi
-
+# Loop through the domains and renew certificates
+for domain in /etc/letsencrypt/live/*; do
+  if [ -d "$domain" ]; then
+    renew_certificate "$(basename "$domain")"
+  fi
 done
 
-
+echo "########END########"
