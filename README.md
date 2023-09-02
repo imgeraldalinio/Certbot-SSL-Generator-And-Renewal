@@ -1,6 +1,7 @@
 # Certificate Renewal Script Using Certbot
 
-![Certbot Logo](https://raw.githubusercontent.com/certbot/certbot/main/certbot-distribution/logos/certbot-logo-72p.png)
+![Certbot Logo](https://raw.githubusercontent.com/EFForg/design/master/logos/eff-certbot-lockup.png)
+
 
 This project includes a Bash script for automating the renewal of SSL/TLS certificates using [Certbot](https://certbot.eff.org/). Certbot is a free, open-source software tool that simplifies the process of obtaining and renewing SSL/TLS certificates for your web server.
 
